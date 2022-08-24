@@ -17,8 +17,8 @@
  */
 
 #include "net/TCPInvertedSocketFactory.h"
-#include "net/TCPSocket.h"
-#include "net/TCPListenSocket.h"
+#include "net/TCPInvertedSocket.h"
+#include "net/TCPInvertedListenSocket.h"
 #include "net/SecureSocket.h"
 #include "net/SecureListenSocket.h"
 #include "arch/Arch.h"
@@ -47,7 +47,7 @@ TCPInvertedSocketFactory::create(bool secure, IArchNetwork::EAddressFamily famil
         return secureSocket;
     }
     else {
-        return new TCPSocket(m_events, m_socketMultiplexer, family);
+        return new TCPInvertedSocket(m_events, m_socketMultiplexer, family);
     }
 }
 
@@ -60,7 +60,7 @@ TCPInvertedSocketFactory::createListen(bool secure, IArchNetwork::EAddressFamily
         socket = new SecureListenSocket(m_events, m_socketMultiplexer, family);
     }
     else {
-        socket = new TCPListenSocket(m_events, m_socketMultiplexer, family);
+        socket = new TCPInvertedListenSocket(m_events, m_socketMultiplexer, family);
     }
 
     return socket;
