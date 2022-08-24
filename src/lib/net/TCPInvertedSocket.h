@@ -19,16 +19,19 @@
 #pragma once
 
 #include "net/IDataSocket.h"
+#include "net/TCPListenSocket.h"
 #include "io/StreamBuffer.h"
 #include "mt/CondVar.h"
 #include "mt/Mutex.h"
 #include "arch/IArchNetwork.h"
+#include <memory>
 
 class Mutex;
 class Thread;
 class ISocketMultiplexerJob;
 class IEventQueue;
 class SocketMultiplexer;
+
 
 //! TCP data socket
 /*!
@@ -64,6 +67,7 @@ public:
     virtual void        connect(const NetworkAddress&);
 
 
+
     virtual ISocketMultiplexerJob*
                         newJob();
 
@@ -90,6 +94,10 @@ protected:
     void                discardWrittenData(int bytesWrote);
 
 private:
+    void startListener();
+    void handleConnecting(const Event&, void*);
+    void handleAccepted(const Event&, void* vsocket);
+
     void                init();
 
     void                sendConnectionFailedEvent(const char*);
@@ -118,4 +126,5 @@ private:
     ArchSocket            m_socket;
     CondVar<bool>        m_flushed;
     SocketMultiplexer*    m_socketMultiplexer;
+    std::unique_ptr<TCPListenSocket> m_listener;
 };

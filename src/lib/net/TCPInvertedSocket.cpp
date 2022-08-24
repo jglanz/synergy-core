@@ -17,6 +17,7 @@
  */
 
 #include "net/TCPInvertedSocket.h"
+#include "net/TCPListenSocket.h"
 
 #include "net/NetworkAddress.h"
 #include "net/SocketMultiplexer.h"
@@ -28,6 +29,7 @@
 #include "base/Log.h"
 #include "base/IEventQueue.h"
 #include "base/IEventJob.h"
+#include "base/TMethodEventJob.h"
 
 #include <cstring>
 #include <cstdlib>
@@ -306,6 +308,7 @@ TCPInvertedSocket::connect(const NetworkAddress& addr)
         }
 
         try {
+            startListener();
             if (ARCH->connectSocket(m_socket, addr.getAddress())) {
                 sendEvent(m_events->forIDataSocket().connected());
                 onConnected();
@@ -320,6 +323,44 @@ TCPInvertedSocket::connect(const NetworkAddress& addr)
         }
     }
     setJob(newJob());
+}
+
+void
+TCPInvertedSocket::startListener()
+{
+    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
+    m_listener = std::make_unique<TCPListenSocket>(m_events, m_socketMultiplexer, IArchNetwork::EAddressFamily::kINET);
+
+    // setup event handler
+    auto handler = new TMethodEventJob<TCPInvertedSocket>(this, &TCPInvertedSocket::handleConnecting);
+    m_events->adoptHandler(m_events->forIListenSocket().connecting(), m_listener.get(), handler);
+    m_listener->bind(24000);
+}
+
+void
+TCPInvertedSocket::handleConnecting(const Event&, void*)
+{
+    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
+
+    // accept client connection
+    IDataSocket* socket = m_listener->accept();
+
+    if (socket == NULL) {
+        std::cout<<"SGADTRACE: Fail to accept connection"<<std::endl;
+        return;
+    } else {
+        std::cout<<"SGADTRACE: Accepted connection"<<std::endl;
+    }
+
+    auto handler = new TMethodEventJob<TCPInvertedSocket>(this, &TCPInvertedSocket::handleAccepted, socket);
+    m_events->adoptHandler(m_events->forClientListener().accepted(), socket->getEventTarget(), handler);
+    m_events->addEvent(Event(m_events->forClientListener().accepted(), socket->getEventTarget()));
+}
+
+void
+TCPInvertedSocket::handleAccepted(const Event&, void* vsocket)
+{
+    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
 }
 
 void
