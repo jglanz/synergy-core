@@ -34,6 +34,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <memory>
+#include <utility>
 #include <iostream>
 
 //
@@ -50,33 +51,14 @@ TCPInvertedSocket::TCPInvertedSocket(IEventQueue* events, SocketMultiplexer* soc
     std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
     try {
         m_socket = ARCH->newSocket(family, IArchNetwork::kSTREAM);
+        LOG((CLOG_DEBUG "Opening new socket: %08X", m_socket));
+        ARCH->setNoDelayOnSocket(m_socket, true);
+
+        m_listener = std::make_unique<TCPListenSocket>(m_events, m_socketMultiplexer, family);
     }
     catch (const XArchNetwork& e) {
         throw XSocketCreate(e.what());
     }
-
-    LOG((CLOG_DEBUG "Opening new socket: %08X", m_socket));
-
-    init();
-}
-
-TCPInvertedSocket::TCPInvertedSocket(IEventQueue* events, SocketMultiplexer* socketMultiplexer, ArchSocket socket) :
-    IDataSocket(events),
-    m_events(events),
-    m_mutex(),
-    m_socket(socket),
-    m_flushed(&m_mutex, true),
-    m_socketMultiplexer(socketMultiplexer)
-{
-    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    assert(m_socket != nullptr);
-
-    LOG((CLOG_DEBUG "Opening new socket: %08X", m_socket));
-
-    // socket starts in connected state
-    init();
-    onConnected();
-    setJob(newJob());
 }
 
 TCPInvertedSocket::~TCPInvertedSocket()
@@ -95,22 +77,17 @@ void
 TCPInvertedSocket::bind(const NetworkAddress& addr)
 {
     std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    try {
-        ARCH->bindSocket(m_socket, addr.getAddress());
-    }
-    catch (const XArchNetworkAddressInUse& e) {
-        throw XSocketAddressInUse(e.what());
-    }
-    catch (const XArchNetwork& e) {
-        throw XSocketBind(e.what());
-    }
+    // setup event handler
+    auto handler = new TMethodEventJob<TCPInvertedSocket>(this, &TCPInvertedSocket::handleConnecting);
+    m_events->adoptHandler(m_events->forIListenSocket().connecting(), m_listener.get(), handler);
+    m_listener->bind(addr);
 }
 
 void
 TCPInvertedSocket::close()
 {
     std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    LOG((CLOG_DEBUG "Closing socket: %08X", m_socket));
+    //LOG((CLOG_DEBUG "Closing socket: %08X", m_socket));
 
     // remove ourself from the multiplexer
     setJob(nullptr);
@@ -124,7 +101,7 @@ TCPInvertedSocket::close()
     onDisconnected();
 
     // close the socket
-    if (m_socket != nullptr) {
+    /*if (m_socket != nullptr) {
         ArchSocket socket = m_socket;
         m_socket = nullptr;
         try {
@@ -134,6 +111,14 @@ TCPInvertedSocket::close()
             // ignore, there's not much we can do
             LOG((CLOG_WARN "error closing socket: %s", e.what()));
         }
+    }*/
+
+    if (m_acceptedSocket) {
+        m_acceptedSocket->close();
+    }
+
+    if (m_listener) {
+        m_listener->close();
     }
 }
 
@@ -215,9 +200,11 @@ void
 TCPInvertedSocket::shutdownInput()
 {
     std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    bool useNewJob = false;
+    m_acceptedSocket->shutdownInput();
+    /*bool useNewJob = false;
     {
         Lock lock(&m_mutex);
+
 
         // shutdown socket for reading
         try {
@@ -237,14 +224,15 @@ TCPInvertedSocket::shutdownInput()
     }
     if (useNewJob) {
         setJob(newJob());
-    }
+    }*/
 }
 
 void
 TCPInvertedSocket::shutdownOutput()
 {
     std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    bool useNewJob = false;
+    m_acceptedSocket->shutdownOutput();
+    /*bool useNewJob = false;
     {
         Lock lock(&m_mutex);
 
@@ -266,7 +254,7 @@ TCPInvertedSocket::shutdownOutput()
     }
     if (useNewJob) {
         setJob(newJob());
-    }
+    }*/
 }
 
 bool
@@ -298,7 +286,8 @@ void
 TCPInvertedSocket::connect(const NetworkAddress& addr)
 {
     std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    {
+    bind(24000);
+    /*{
         Lock lock(&m_mutex);
 
         // fail on attempts to reconnect
@@ -308,7 +297,7 @@ TCPInvertedSocket::connect(const NetworkAddress& addr)
         }
 
         try {
-            startListener();
+
             if (ARCH->connectSocket(m_socket, addr.getAddress())) {
                 sendEvent(m_events->forIDataSocket().connected());
                 onConnected();
@@ -322,19 +311,7 @@ TCPInvertedSocket::connect(const NetworkAddress& addr)
             throw XSocketConnect(e.what());
         }
     }
-    setJob(newJob());
-}
-
-void
-TCPInvertedSocket::startListener()
-{
-    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    m_listener = std::make_unique<TCPListenSocket>(m_events, m_socketMultiplexer, IArchNetwork::EAddressFamily::kINET);
-
-    // setup event handler
-    auto handler = new TMethodEventJob<TCPInvertedSocket>(this, &TCPInvertedSocket::handleConnecting);
-    m_events->adoptHandler(m_events->forIListenSocket().connecting(), m_listener.get(), handler);
-    m_listener->bind(24000);
+    setJob(newJob());*/
 }
 
 void
@@ -349,45 +326,9 @@ TCPInvertedSocket::handleConnecting(const Event&, void*)
         std::cout<<"SGADTRACE: Fail to accept connection"<<std::endl;
         return;
     } else {
+        m_acceptedSocket.reset(socket);
+        m_socket = m_acceptedSocket->getRawSocket();
         std::cout<<"SGADTRACE: Accepted connection"<<std::endl;
-    }
-
-    auto handler = new TMethodEventJob<TCPInvertedSocket>(this, &TCPInvertedSocket::handleAccepted, socket);
-    m_events->adoptHandler(m_events->forClientListener().accepted(), socket->getEventTarget(), handler);
-    m_events->addEvent(Event(m_events->forClientListener().accepted(), socket->getEventTarget()));
-}
-
-void
-TCPInvertedSocket::handleAccepted(const Event&, void* vsocket)
-{
-    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-}
-
-void
-TCPInvertedSocket::init()
-{
-    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
-    // default state
-    m_connected = false;
-    m_readable  = false;
-    m_writable  = false;
-
-    try {
-        // turn off Nagle algorithm.  we send lots of very short messages
-        // that should be sent without (much) delay.  for example, the
-        // mouse motion messages are much less useful if they're delayed.
-        ARCH->setNoDelayOnSocket(m_socket, true);
-    }
-    catch (const XArchNetwork& e) {
-        try {
-            ARCH->closeSocket(m_socket);
-            m_socket = nullptr;
-        }
-        catch (const XArchNetwork& e) {
-            // ignore, there's not much we can do
-            LOG((CLOG_WARN "error closing socket: %s", e.what()));
-        }
-        throw XSocketCreate(e.what());
     }
 }
 
@@ -672,4 +613,9 @@ TCPInvertedSocket::serviceConnected(ISocketMultiplexerJob* job,
     }
 
     return result == kNew ? newJob() : job;
+}
+
+ArchSocket TCPInvertedSocket::getRawSocket() const
+{
+    return m_socket;
 }

@@ -20,6 +20,7 @@
 
 #include "net/ISocket.h"
 #include "io/IStream.h"
+#include "arch/IArchNetwork.h"
 #include "base/String.h"
 #include "base/EventTypes.h"
 
@@ -70,4 +71,5 @@ public:
     virtual bool        isReady() const = 0;
     virtual bool        isFatal() const = 0;
     virtual UInt32        getSize() const = 0;
+    virtual ArchSocket  getRawSocket() const = 0;
 };

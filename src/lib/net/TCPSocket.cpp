@@ -339,9 +339,9 @@ TCPSocket::doRead()
     UInt8 buffer[4096];
     memset(buffer, 0, sizeof(buffer));
     size_t bytesRead = 0;
-    
+
     bytesRead = ARCH->readSocket(m_socket, buffer, sizeof(buffer));
-    
+
     if (bytesRead > 0) {
         bool wasEmpty = (m_inputBuffer.getSize() == 0);
         
@@ -601,4 +601,9 @@ TCPSocket::serviceConnected(ISocketMultiplexerJob* job,
     }
 
     return result == kNew ? newJob() : job;
+}
+
+ArchSocket TCPSocket::getRawSocket() const
+{
+    return m_socket;
 }

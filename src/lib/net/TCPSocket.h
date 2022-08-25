@@ -118,4 +118,8 @@ private:
     ArchSocket            m_socket;
     CondVar<bool>        m_flushed;
     SocketMultiplexer*    m_socketMultiplexer;
+
+    // IDataSocket interface
+public:
+    ArchSocket getRawSocket() const;
 };

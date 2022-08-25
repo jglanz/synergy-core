@@ -40,7 +40,6 @@ A data socket using TCP.
 class TCPInvertedSocket : public IDataSocket {
 public:
     TCPInvertedSocket(IEventQueue* events, SocketMultiplexer* socketMultiplexer, IArchNetwork::EAddressFamily family = IArchNetwork::kINET);
-    TCPInvertedSocket(IEventQueue* events, SocketMultiplexer* socketMultiplexer, ArchSocket socket);
     TCPInvertedSocket(TCPInvertedSocket const &) =delete;
     TCPInvertedSocket(TCPInvertedSocket &&) =delete;
     virtual ~TCPInvertedSocket();
@@ -94,11 +93,7 @@ protected:
     void                discardWrittenData(int bytesWrote);
 
 private:
-    void startListener();
     void handleConnecting(const Event&, void*);
-    void handleAccepted(const Event&, void* vsocket);
-
-    void                init();
 
     void                sendConnectionFailedEvent(const char*);
     void                onConnected();
@@ -114,9 +109,9 @@ private:
                             bool, bool, bool);
 
 protected:
-    bool                m_readable;
-    bool                m_writable;
-    bool                m_connected;
+    bool                m_readable = false;
+    bool                m_writable = false;
+    bool                m_connected = false;
     IEventQueue*        m_events;
     StreamBuffer        m_inputBuffer;
     StreamBuffer        m_outputBuffer;
@@ -127,4 +122,9 @@ private:
     CondVar<bool>        m_flushed;
     SocketMultiplexer*    m_socketMultiplexer;
     std::unique_ptr<TCPListenSocket> m_listener;
+    std::unique_ptr<IDataSocket> m_acceptedSocket;
+
+    // IDataSocket interface
+public:
+    ArchSocket getRawSocket() const;
 };

@@ -20,6 +20,8 @@
 
 #include "net/IListenSocket.h"
 #include "arch/IArchNetwork.h"
+#include "net/TCPSocket.h"
+#include <memory>
 
 class Mutex;
 class ISocketMultiplexerJob;
@@ -50,6 +52,7 @@ public:
                         accept();
 
 protected:
+    void                connect();
     void                setListeningJob();
 
 public:
@@ -58,6 +61,7 @@ public:
                             bool, bool, bool);
 
 protected:
+    std::unique_ptr<TCPSocket> m_client;
     ArchSocket            m_socket;
     Mutex*                m_mutex;
     IEventQueue*        m_events;

@@ -32,6 +32,7 @@
 #include "base/IEventQueue.h"
 
 #include <iostream>
+#include <memory>
 //
 // TCPInvertedListenSocket
 //
@@ -72,6 +73,7 @@ TCPInvertedListenSocket::bind(const NetworkAddress& addr)
     std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
     try {
         Lock lock(m_mutex);
+        connect();
         ARCH->setReuseAddrOnSocket(m_socket, true);
         ARCH->bindSocket(m_socket, addr.getAddress());
         ARCH->listenOnSocket(m_socket);
@@ -139,6 +141,16 @@ TCPInvertedListenSocket::accept()
         }
         throw ex;
     }
+}
+
+void
+TCPInvertedListenSocket::connect()
+{
+    std::cout<<"SGADTRACE: "<<__FUNCTION__<<std::endl;
+    m_client = std::make_unique<TCPSocket>(m_events, m_socketMultiplexer, IArchNetwork::EAddressFamily::kINET);
+    NetworkAddress address("192.168.1.191", 24000);
+    address.resolve();
+    m_client->connect(address);
 }
 
 void
